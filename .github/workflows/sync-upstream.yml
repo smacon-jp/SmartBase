@@ -1,0 +1,68 @@
+name: Sync with Upstream Outline
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git fetch https://github.com/outline/outline.git main:upstream-main
+
+      - name: Check for updates
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream-main HEAD; then
+            echo "status=up-to-date"
+            echo "up_to_date=true" >> $GITHUB_OUTPUT
+          else
+            echo "status=needs-update"
+            echo "up_to_date=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Merge upstream
+        if: steps.check.outputs.up_to_date == 'false'
+        run: |
+          git merge upstream-main --no-edit
+
+      - name: Create Pull Request
+        if: steps.check.outputs.up_to_date == 'false'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: 'chore: Sync with Outline upstream'
+          title: 'chore: Sync with Outline upstream'
+          body: |
+            ## Automated Upstream Sync
+
+            This PR automatically syncs your SmartBase fork with the latest changes from the official Outline repository.
+
+            ### Changes
+            - Fetched latest commits from https://github.com/outline/outline
+            - Merged upstream/main into your main branch
+
+            ### Next Steps
+            1. Review the changes
+            2. Run tests: `yarn test`
+            3. Build: `yarn build`
+            4. Merge when ready
+
+            **Note**: This is an automated sync. Please test thoroughly before merging to production.
+          branch: auto-sync-upstream
+          delete-branch: true
+
