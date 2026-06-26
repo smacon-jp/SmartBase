@@ -30,11 +30,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy package.json early for corepack prepare
+# Copy package.json first (needed for corepack enable to work)
 COPY --from=builder /app/package.json ./package.json
 
-# Prepare Yarn 4.11.0 with corepack (installs it to .yarn/releases)
-RUN corepack prepare --activate
+# Enable Corepack for Yarn 4.11.0 support (must be root, before USER nodejs)
+RUN corepack enable
 
 # Create non-root user
 RUN addgroup --gid 1001 nodejs && \
