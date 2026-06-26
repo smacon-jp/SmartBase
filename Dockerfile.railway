@@ -1,0 +1,64 @@
+# Build stage
+FROM node:22-bookworm AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY patches ./patches
+
+# Install dependencies
+RUN apt-get update && apt-get install -y cmake && rm -rf /var/lib/apt/lists/*
+RUN corepack enable
+RUN yarn install --immutable --network-timeout 1000000 && yarn cache clean
+
+# Copy source code
+COPY . .
+
+# Build the application
+ENV NODE_OPTIONS="--max-old-space-size=24000"
+RUN yarn build
+
+# Prune dependencies for production
+RUN yarn workspaces focus --production && yarn cache clean
+
+# Runtime stage
+FROM node:22-slim
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Create non-root user
+RUN addgroup --gid 1001 nodejs && \
+    adduser --uid 1001 --ingroup nodejs nodejs && \
+    mkdir -p /var/lib/outline && \
+    chown -R nodejs:nodejs /var/lib/outline && \
+    chown -R nodejs:nodejs /app
+
+# Copy built artifacts from builder
+COPY --from=builder --chown=nodejs:nodejs /app/build ./build
+COPY --from=builder --chown=nodejs:nodejs /app/server ./server
+COPY --from=builder --chown=nodejs:nodejs /app/public ./public
+COPY --from=builder --chown=nodejs:nodejs /app/.sequelizerc ./.sequelizerc
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+
+# Install wget for healthcheck
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+# Setup data directory
+ENV FILE_STORAGE_LOCAL_ROOT_DIR=/var/lib/outline/data
+RUN mkdir -p "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+    chown -R nodejs:nodejs "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+    chmod 1777 "$FILE_STORAGE_LOCAL_ROOT_DIR"
+
+USER nodejs
+
+HEALTHCHECK --interval=1m CMD wget -qO- "http://localhost:${PORT:-3000}/_health" | grep -q "OK" || exit 1
+
+EXPOSE 3000
+
+CMD ["node", "build/server/index.js"]
+
