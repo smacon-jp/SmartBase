@@ -1,0 +1,4 @@
+[build]
+# Enable Corepack to use the packageManager specified in package.json
+corepackEnabled = true
+
