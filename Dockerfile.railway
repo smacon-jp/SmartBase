@@ -30,6 +30,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Enable Corepack and suppress download prompts for runtime
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
 # Create non-root user
 RUN addgroup --gid 1001 nodejs && \
     adduser --uid 1001 --ingroup nodejs nodejs && \
@@ -37,13 +40,16 @@ RUN addgroup --gid 1001 nodejs && \
     chown -R nodejs:nodejs /var/lib/outline && \
     chown -R nodejs:nodejs /app
 
-# Copy built artifacts from builder
+# Copy built artifacts from builder (including .yarn directory for Corepack)
 COPY --from=builder --chown=nodejs:nodejs /app/build ./build
 COPY --from=builder --chown=nodejs:nodejs /app/server ./server
 COPY --from=builder --chown=nodejs:nodejs /app/public ./public
 COPY --from=builder --chown=nodejs:nodejs /app/.sequelizerc ./.sequelizerc
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/yarn.lock ./yarn.lock
+COPY --from=builder --chown=nodejs:nodejs /app/.yarnrc.yml ./.yarnrc.yml
+COPY --from=builder --chown=nodejs:nodejs /app/.yarn ./.yarn
 
 # Install wget for healthcheck
 RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
