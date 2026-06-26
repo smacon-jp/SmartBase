@@ -1,5 +1,5 @@
 # Build stage
-FROM node:26.3.0 AS builder
+FROM node:20.12.0 AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ COPY patches ./patches
 
 # Install dependencies
 RUN apt-get update && apt-get install -y cmake && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+RUN npm install -g corepack@latest && corepack enable
 RUN yarn install --immutable --network-timeout 1000000 && yarn cache clean
 
 # Copy source code
@@ -23,7 +23,7 @@ RUN yarn build
 RUN yarn workspaces focus --production && yarn cache clean
 
 # Runtime stage
-FROM node:26.3.0-slim
+FROM node:20.12.0-slim
 
 WORKDIR /app
 
