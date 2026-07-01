@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { Context, Next } from "koa";
 import { contentSecurityPolicy } from "koa-helmet";
 import { uniq } from "es-toolkit/compat";
+import { parseDomain } from "@shared/utils/domains";
 import env from "@server/env";
 
 const getBucketOrigin = () => {
@@ -84,6 +85,20 @@ export default function createCSPMiddleware(options?: CSPOptions) {
   return function cspMiddleware(ctx: Context, next: Next) {
     ctx.state.cspNonce = crypto.randomBytes(16).toString("hex");
 
+    // If the request is coming from a custom domain (e.g. wiki.example.com),
+    // include that hostname in script-src so that dynamic module imports and
+    // other script loads originating from the custom origin are not blocked.
+    const customDomainScriptSrc: string[] = [];
+    try {
+      const { custom } = parseDomain(ctx.hostname);
+      const mainHostname = new URL(env.URL).hostname;
+      if (custom && ctx.hostname !== mainHostname) {
+        customDomainScriptSrc.push(ctx.hostname);
+      }
+    } catch {
+      // ignore parse errors — hostname may be empty in test environments
+    }
+
     // Note: workerSrc is included even though it's missing from the koa-helmet
     // type definitions — the underlying helmet supports it. The service worker
     // is served from the same origin as the document, which may be a custom
@@ -93,7 +108,7 @@ export default function createCSPMiddleware(options?: CSPOptions) {
       defaultSrc,
       styleSrc,
       scriptSrc: [
-        ...uniq(scriptSrc),
+        ...uniq([...scriptSrc, ...customDomainScriptSrc]),
         ...(options?.extraScriptSrc ?? []),
         env.DEVELOPMENT_UNSAFE_INLINE_CSP
           ? "'unsafe-inline'"
